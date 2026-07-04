@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0E0B14">
+<title>Routine Trading — IMA</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+<style>
+  :root {
+    --base: #0E0B14;
+    --surface: #17131F;
+    --surface-2: #201A2C;
+    --border: #2E2740;
+    --violet: #7B2CBF;
+    --blue: #4361EE;
+    --teal: #2DD4A7;
+    --coral: #F45B69;
+    --gold: #E8B742;
+    --text: #F4F1FA;
+    --text-muted: #9C93B5;
+    --text-faint: #6B6284;
+    --radius: 18px;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--base);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    padding-bottom: 48px;
+    background-image:
+      radial-gradient(ellipse 600px 300px at 15% 0%, rgba(123,44,191,0.20), transparent 60%),
+      radial-gradient(ellipse 500px 260px at 90% 8%, rgba(67,97,238,0.16), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, .display {
+    font-family: 'Space Grotesk', sans-serif;
+    letter-spacing: -0.01em;
+  }
+
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* ---------- Header ---------- */
+  header {
+    padding: 28px 20px 18px;
+  }
+
+  .eyebrow {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-faint);
+    font-weight: 600;
+    margin: 0 0 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    font-weight: 700;
+    margin: 0;
+    color: var(--text);
+  }
+
+  .sync-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--teal);
+    box-shadow: 0 0 0 3px rgba(45,212,167,0.18);
+  }
+  .dot.err { background: var(--coral); box-shadow: 0 0 0 3px rgba(244,91,105,0.18); }
+  .dot.wait { background: var(--gold); box-shadow: 0 0 0 3px rgba(232,183,66,0.18); }
+
+  /* ---------- Hero capital ---------- */
+  .hero {
+    margin: 0 20px 20px;
+    padding: 22px 22px 14px;
+    background: linear-gradient(160deg, var(--surface-2), var(--surface));
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero-label {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 0 0 4px;
+  }
+
+  .hero-value {
+    font-size: 40px;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .hero-delta {
+    font-size: 15px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .hero-delta.up { color: var(--teal); }
+  .hero-delta.down { color: var(--coral); }
+  .hero-delta.flat { color: var(--text-muted); }
+
+  #equityChart { margin-top: 10px; max-height: 90px; }
+
+  /* ---------- Stats grid ---------- */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 0 20px 24px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 12px;
+    text-align: left;
+  }
+
+  .stat-value {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 21px;
+    font-weight: 700;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-top: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* ---------- Sections ---------- */
+  section { margin: 0 20px 26px; }
+
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .section-head h2 {
+    font-size: 17px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .section-count {
+    font-size: 12px;
+    color: var(--text-faint);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ---------- Candle status glyph (signature) ---------- */
+  .candle {
+    width: 10px; height: 22px;
+    border-radius: 3px;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .candle::before {
+    content: "";
+    position: absolute;
+    left: 50%; top: -5px;
+    width: 2px; height: 5px;
+    background: currentColor;
+    transform: translateX(-50%);
+    opacity: 0.6;
+  }
+  .candle::after {
+    content: "";
+    position: absolute;
+    left: 50%; bottom: -5px;
+    width: 2px; height: 5px;
+    background: currentColor;
+    transform: translateX(-50%);
+    opacity: 0.6;
+  }
+  .candle.up { background: var(--teal); color: var(--teal); }
+  .candle.down { background: var(--coral); color: var(--coral); }
+
+  /* ---------- Setup cards ---------- */
+  .setup-card {
+    display: flex;
+    gap: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    align-items: flex-start;
+  }
+
+  .setup-main { flex: 1; min-width: 0; }
+
+  .setup-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .setup-symbol {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+  }
+
+  .setup-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .badge-pending { background: rgba(232,183,66,0.15); color: var(--gold); }
+  .badge-win { background: rgba(45,212,167,0.15); color: var(--teal); }
+  .badge-loss { background: rgba(244,91,105,0.15); color: var(--coral); }
+
+  .setup-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px 10px;
+    font-size: 12.5px;
+  }
+
+  .setup-grid .k { color: var(--text-faint); }
+  .setup-grid .v { font-family: 'JetBrains Mono', monospace; color: var(--text); }
+
+  .setup-time {
+    font-size: 11.5px;
+    color: var(--text-faint);
+    margin-top: 8px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ---------- History table ---------- */
+  .history-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+
+  thead th {
+    text-align: left;
+    padding: 10px 12px;
+    color: var(--text-faint);
+    font-weight: 600;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+    white-space: nowrap;
+    color: var(--text);
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+
+  .table-scroll { overflow-x: auto; }
+
+  /* ---------- States ---------- */
+  .empty-state, .error-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+  .error-state { color: var(--coral); }
+
+  .skeleton {
+    background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: 14px;
+    height: 70px;
+    margin-bottom: 10px;
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  footer {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-faint);
+    font-size: 11.5px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <p class="eyebrow">IM'S Services · Price Action</p>
+  <h1>Routine Trading</h1>
+  <div class="sync-row">
+    <span class="dot wait" id="syncDot"></span>
+    <span id="syncText">Connexion au journal…</span>
+  </div>
+</header>
+
+<div class="hero">
+  <p class="hero-label">Capital estimé (simulation)</p>
+  <p class="hero-value">
+    <span id="capitalValue">—</span>
+    <span class="hero-delta flat" id="capitalDelta"></span>
+  </p>
+  <canvas id="equityChart" height="90"></canvas>
+</div>
+
+<div class="stats-grid" id="statsGrid">
+  <div class="stat-card"><div class="stat-value" id="statTotal">—</div><div class="stat-label">Setups détectés</div></div>
+  <div class="stat-card"><div class="stat-value" id="statWinrate">—</div><div class="stat-label">Taux de réussite</div></div>
+  <div class="stat-card"><div class="stat-value" id="statRR">1:2</div><div class="stat-label">RR cible</div></div>
+</div>
+
+<section>
+  <div class="section-head">
+    <h2>En attente de décision</h2>
+    <span class="section-count" id="pendingCount">0</span>
+  </div>
+  <div id="pendingList"><div class="skeleton"></div><div class="skeleton"></div></div>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>Historique complet</h2>
+    <span class="section-count" id="historyCount">0</span>
+  </div>
+  <div class="history-wrap">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th><th>Symb.</th><th>Dir.</th><th>Pattern</th>
+            <th>Entrée</th><th>SL</th><th>TP</th><th>Risque</th><th>Résultat</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody">
+          <tr><td colspan="9" style="text-align:center;color:var(--text-faint);padding:20px;">Chargement…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<footer>Données synchronisées depuis Google Sheets · Aucun ordre n'est exécuté automatiquement</footer>
+
+<script>
+// ============================================================
+// CONFIGURATION — a personnaliser
+// ============================================================
+// Remplace cette URL par l'URL CSV publiee de ton Google Sheet
+// (Fichier > Partager > Publier sur le web > format CSV)
+const CSV_URL = "REMPLACER_PAR_URL_CSV_PUBLIEE";
+
+const CAPITAL_INITIAL = 100; // doit matcher CAPITAL_USD de la routine
+
+// ============================================================
+// ETAT
+// ============================================================
+let lignes = [];
+let chart = null;
+
+// ============================================================
+// UTILITAIRES
+// ============================================================
+function setSync(state, text) {
+  const dot = document.getElementById("syncDot");
+  const label = document.getElementById("syncText");
+  dot.className = "dot" + (state === "ok" ? "" : state === "err" ? " err" : " wait");
+  label.textContent = text;
+}
+
+function parseNombre(val) {
+  const n = parseFloat(String(val).replace(",", "."));
+  return isNaN(n) ? 0 : n;
+}
+
+function normaliserResultat(val) {
+  const v = (val || "").toString().trim().toLowerCase();
+  if (v.startsWith("gagn") || v === "win") return "win";
+  if (v.startsWith("perd") || v === "loss") return "loss";
+  return "pending";
+}
+
+// ============================================================
+// CHARGEMENT DES DONNEES
+// ============================================================
+function chargerDonnees() {
+  if (!CSV_URL || CSV_URL.includes("REMPLACER")) {
+    setSync("err", "URL du journal non configurée");
+    document.getElementById("historyBody").innerHTML =
+      '<tr><td colspan="9" class="error-state">Configure CSV_URL dans le code de l\'app</td></tr>';
+    return;
+  }
+
+  Papa.parse(CSV_URL, {
+    download: true,
+    header: true,
+    skipEmptyLines: true,
+    complete: (res) => {
+      lignes = res.data;
+      setSync("ok", `Synchronisé · ${lignes.length} entrée(s)`);
+      afficherTout();
+    },
+    error: (err) => {
+      console.error(err);
+      setSync("err", "Erreur de synchronisation");
+      document.getElementById("historyBody").innerHTML =
+        '<tr><td colspan="9" class="error-state">Impossible de charger le journal</td></tr>';
+    }
+  });
+}
+
+// ============================================================
+// AFFICHAGE
+// ============================================================
+function afficherTout() {
+  afficherStatsEtCapital();
+  afficherEnAttente();
+  afficherHistorique();
+}
+
+function afficherStatsEtCapital() {
+  const total = lignes.length;
+  let capital = CAPITAL_INITIAL;
+  const courbe = [capital];
+
+  let gagnants = 0, perdants = 0;
+
+  lignes.forEach((l) => {
+    const risque = parseNombre(l["Risque ($)"]);
+    const resultat = normaliserResultat(l["Resultat (a remplir)"]);
+    if (resultat === "win") { capital += risque * 2; gagnants++; }
+    else if (resultat === "loss") { capital -= risque; perdants++; }
+    courbe.push(capital);
+  });
+
+  const winrate = (gagnants + perdants) > 0 ? Math.round((gagnants / (gagnants + perdants)) * 100) : null;
+  const delta = capital - CAPITAL_INITIAL;
+
+  document.getElementById("capitalValue").textContent = "$" + capital.toFixed(2);
+  document.getElementById("statTotal").textContent = total;
+  document.getElementById("statWinrate").textContent = winrate === null ? "—" : winrate + "%";
+
+  const deltaEl = document.getElementById("capitalDelta");
+  deltaEl.textContent = (delta >= 0 ? "+" : "") + delta.toFixed(2) + "$";
+  deltaEl.className = "hero-delta " + (delta > 0 ? "up" : delta < 0 ? "down" : "flat");
+
+  dessinerCourbe(courbe);
+}
+
+function dessinerCourbe(courbe) {
+  const ctx = document.getElementById("equityChart");
+  const monteGlobale = courbe[courbe.length - 1] >= courbe[0];
+  const couleur = monteGlobale ? "#2DD4A7" : "#F45B69";
+
+  if (chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: courbe.map((_, i) => i),
+      datasets: [{
+        data: courbe,
+        borderColor: couleur,
+        borderWidth: 2.5,
+        tension: 0.35,
+        pointRadius: 0,
+        fill: true,
+        backgroundColor: (ctx) => {
+          const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, 90);
+          g.addColorStop(0, couleur + "33");
+          g.addColorStop(1, couleur + "00");
+          return g;
+        }
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: { x: { display: false }, y: { display: false } },
+      elements: { line: { capBezierPoints: true } }
+    }
+  });
+}
+
+function afficherEnAttente() {
+  const enAttente = lignes.filter((l) => normaliserResultat(l["Resultat (a remplir)"]) === "pending");
+  const container = document.getElementById("pendingList");
+  document.getElementById("pendingCount").textContent = enAttente.length;
+
+  if (enAttente.length === 0) {
+    container.innerHTML = '<div class="empty-state">Aucun setup en attente — la routine te notifiera dès qu\'un nouveau apparaît.</div>';
+    return;
+  }
+
+  container.innerHTML = enAttente.slice().reverse().map((l) => {
+    const direction = (l["Direction"] || "").toUpperCase();
+    const estHausse = direction.includes("HAUS");
+    return `
+      <div class="setup-card">
+        <div class="candle ${estHausse ? "up" : "down"}"></div>
+        <div class="setup-main">
+          <div class="setup-top-row">
+            <span class="setup-symbol">${l["Symbole"] || "—"}</span>
+            <span class="setup-badge badge-pending">En attente</span>
+          </div>
+          <div class="setup-grid">
+            <div><div class="k">Entrée</div><div class="v">${l["Prix d'entree"] || "—"}</div></div>
+            <div><div class="k">SL</div><div class="v">${l["Stop-loss"] || "—"}</div></div>
+            <div><div class="k">TP</div><div class="v">${l["Take-profit"] || "—"}</div></div>
+          </div>
+          <div class="setup-time">${l["Date/Heure (UTC)"] || ""} · ${l["Pattern"] || ""}</div>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function afficherHistorique() {
+  const tbody = document.getElementById("historyBody");
+  document.getElementById("historyCount").textContent = lignes.length;
+
+  if (lignes.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Aucun setup enregistré pour l\'instant</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = lignes.slice().reverse().map((l) => {
+    const resultat = normaliserResultat(l["Resultat (a remplir)"]);
+    const badgeClass = resultat === "win" ? "badge-win" : resultat === "loss" ? "badge-loss" : "badge-pending";
+    const badgeText = resultat === "win" ? "Gagné" : resultat === "loss" ? "Perdu" : "En attente";
+    return `<tr>
+      <td>${(l["Date/Heure (UTC)"] || "—").slice(5, 16)}</td>
+      <td>${l["Symbole"] || "—"}</td>
+      <td>${(l["Direction"] || "—").slice(0, 4)}</td>
+      <td>${l["Pattern"] || "—"}</td>
+      <td>${l["Prix d'entree"] || "—"}</td>
+      <td>${l["Stop-loss"] || "—"}</td>
+      <td>${l["Take-profit"] || "—"}</td>
+      <td>$${l["Risque ($)"] || "—"}</td>
+      <td><span class="setup-badge ${badgeClass}">${badgeText}</span></td>
+    </tr>`;
+  }).join("");
+}
+
+// ============================================================
+// INITIALISATION
+// ============================================================
+chargerDonnees();
+setInterval(chargerDonnees, 5 * 60 * 1000); // rafraichit toutes les 5 min
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("service-worker.js").catch(console.error);
+  });
+}
+</script>
+
+</body>
+</html>
