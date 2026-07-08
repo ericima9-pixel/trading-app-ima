@@ -1,6 +1,5 @@
-const CACHE_NAME = "routine-trading-ima-v1";
+const CACHE_NAME = "routine-trading-ima-v2";
 const SHELL_FILES = [
-  "./index.html",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png"
@@ -22,11 +21,18 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// index.html et les donnees : toujours reseau d'abord (jamais de version perimee)
+// Assets statiques (icones, manifest) : cache d'abord pour la vitesse hors-ligne
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
-  const estDonnee = url.hostname.includes("google.com") || url.hostname.includes("googleusercontent.com");
+  const estPageOuDonnee =
+    event.request.mode === "navigate" ||
+    url.pathname.endsWith("index.html") ||
+    url.pathname === "/" ||
+    url.hostname.includes("google.com") ||
+    url.hostname.includes("googleusercontent.com");
 
-  if (estDonnee) {
+  if (estPageOuDonnee) {
     event.respondWith(
       fetch(event.request).catch(() => caches.match(event.request))
     );
