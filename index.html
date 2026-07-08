@@ -399,6 +399,12 @@ const CSV_URL = "https://docs.google.com/spreadsheets/d/1ogoernIbkvxNg9kdEn19iFL
 
 const CAPITAL_INITIAL = 100; // doit matcher CAPITAL_USD de la routine
 
+// Colonnes lues par POSITION (immunise contre les problemes d'encodage/BOM des en-tetes)
+const COL = {
+  DATE: 0, SYMBOLE: 1, DIRECTION: 2, PATTERN: 3, ZONE: 4,
+  ENTREE: 5, SL: 6, TP: 7, TAILLE: 8, RISQUE: 9, PRIS: 10, RESULTAT: 11, NOTES: 12
+};
+
 // ============================================================
 // ETAT
 // ============================================================
@@ -416,7 +422,7 @@ function setSync(state, text) {
 }
 
 function parseNombre(val) {
-  const n = parseFloat(String(val).replace(",", "."));
+  const n = parseFloat(String(val || "").replace(",", "."));
   return isNaN(n) ? 0 : n;
 }
 
@@ -428,22 +434,32 @@ function normaliserResultat(val) {
 }
 
 // ============================================================
-// CHARGEMENT DES DONNEES
+// CHARGEMENT DES DONNEES (parsing par position de colonne)
 // ============================================================
 function chargerDonnees() {
   if (!CSV_URL || CSV_URL.includes("REMPLACER")) {
     setSync("err", "URL du journal non configurée");
-    document.getElementById("historyBody").innerHTML =
-      '<tr><td colspan="9" class="error-state">Configure CSV_URL dans le code de l\'app</td></tr>';
     return;
   }
 
   Papa.parse(CSV_URL, {
     download: true,
-    header: true,
+    header: false,
     skipEmptyLines: true,
     complete: (res) => {
-      lignes = res.data;
+      const brut = res.data;
+      // La premiere ligne est l'en-tete -> on l'ignore et on mappe par position
+      lignes = brut.slice(1).map((row) => ({
+        date: row[COL.DATE] || "",
+        symbole: row[COL.SYMBOLE] || "",
+        direction: row[COL.DIRECTION] || "",
+        pattern: row[COL.PATTERN] || "",
+        entree: row[COL.ENTREE] || "",
+        sl: row[COL.SL] || "",
+        tp: row[COL.TP] || "",
+        risque: row[COL.RISQUE] || "",
+        resultat: row[COL.RESULTAT] || ""
+      }));
       setSync("ok", `Synchronisé · ${lignes.length} entrée(s)`);
       afficherTout();
     },
@@ -473,8 +489,8 @@ function afficherStatsEtCapital() {
   let gagnants = 0, perdants = 0;
 
   lignes.forEach((l) => {
-    const risque = parseNombre(l["Risque ($)"]);
-    const resultat = normaliserResultat(l["Resultat (a remplir)"]);
+    const risque = parseNombre(l.risque);
+    const resultat = normaliserResultat(l.resultat);
     if (resultat === "win") { capital += risque * 2; gagnants++; }
     else if (resultat === "loss") { capital -= risque; perdants++; }
     courbe.push(capital);
@@ -530,7 +546,7 @@ function dessinerCourbe(courbe) {
 }
 
 function afficherEnAttente() {
-  const enAttente = lignes.filter((l) => normaliserResultat(l["Resultat (a remplir)"]) === "pending");
+  const enAttente = lignes.filter((l) => normaliserResultat(l.resultat) === "pending");
   const container = document.getElementById("pendingList");
   document.getElementById("pendingCount").textContent = enAttente.length;
 
@@ -540,22 +556,22 @@ function afficherEnAttente() {
   }
 
   container.innerHTML = enAttente.slice().reverse().map((l) => {
-    const direction = (l["Direction"] || "").toUpperCase();
+    const direction = (l.direction || "").toUpperCase();
     const estHausse = direction.includes("HAUS");
     return `
       <div class="setup-card">
         <div class="candle ${estHausse ? "up" : "down"}"></div>
         <div class="setup-main">
           <div class="setup-top-row">
-            <span class="setup-symbol">${l["Symbole"] || "—"}</span>
+            <span class="setup-symbol">${l.symbole || "—"}</span>
             <span class="setup-badge badge-pending">En attente</span>
           </div>
           <div class="setup-grid">
-            <div><div class="k">Entrée</div><div class="v">${l["Prix d'entree"] || "—"}</div></div>
-            <div><div class="k">SL</div><div class="v">${l["Stop-loss"] || "—"}</div></div>
-            <div><div class="k">TP</div><div class="v">${l["Take-profit"] || "—"}</div></div>
+            <div><div class="k">Entrée</div><div class="v">${l.entree || "—"}</div></div>
+            <div><div class="k">SL</div><div class="v">${l.sl || "—"}</div></div>
+            <div><div class="k">TP</div><div class="v">${l.tp || "—"}</div></div>
           </div>
-          <div class="setup-time">${l["Date/Heure (UTC)"] || ""} · ${l["Pattern"] || ""}</div>
+          <div class="setup-time">${l.date || ""} · ${l.pattern || ""}</div>
         </div>
       </div>`;
   }).join("");
@@ -571,18 +587,18 @@ function afficherHistorique() {
   }
 
   tbody.innerHTML = lignes.slice().reverse().map((l) => {
-    const resultat = normaliserResultat(l["Resultat (a remplir)"]);
+    const resultat = normaliserResultat(l.resultat);
     const badgeClass = resultat === "win" ? "badge-win" : resultat === "loss" ? "badge-loss" : "badge-pending";
     const badgeText = resultat === "win" ? "Gagné" : resultat === "loss" ? "Perdu" : "En attente";
     return `<tr>
-      <td>${(l["Date/Heure (UTC)"] || "—").slice(5, 16)}</td>
-      <td>${l["Symbole"] || "—"}</td>
-      <td>${(l["Direction"] || "—").slice(0, 4)}</td>
-      <td>${l["Pattern"] || "—"}</td>
-      <td>${l["Prix d'entree"] || "—"}</td>
-      <td>${l["Stop-loss"] || "—"}</td>
-      <td>${l["Take-profit"] || "—"}</td>
-      <td>$${l["Risque ($)"] || "—"}</td>
+      <td>${(l.date || "—").slice(5, 16)}</td>
+      <td>${l.symbole || "—"}</td>
+      <td>${(l.direction || "—").slice(0, 4)}</td>
+      <td>${l.pattern || "—"}</td>
+      <td>${l.entree || "—"}</td>
+      <td>${l.sl || "—"}</td>
+      <td>${l.tp || "—"}</td>
+      <td>$${l.risque || "—"}</td>
       <td><span class="setup-badge ${badgeClass}">${badgeText}</span></td>
     </tr>`;
   }).join("");
